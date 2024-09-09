@@ -117,7 +117,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         formData.append('file', new Blob([zipContent], { type: 'application/zip' }), zipFileName);
       
         // 发送请求到后端
-        fetch('http://localhost:8080/upload', {
+        fetch('http://172.16.32.12:8080/upload', {
           method: 'POST',
           body: formData
         })
