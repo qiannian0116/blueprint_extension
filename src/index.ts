@@ -82,10 +82,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
       
         // 获取当前路径
         const currentPath = currentWidget.model.path;
-        
+      
         // 获取 document manager 服务
         const documentManager = currentWidget.model.manager;
-        
+      
         // 使用 services.contents 获取目录下的文件
         const fileItems = await documentManager.services.contents.get(currentPath);
       
@@ -121,14 +121,25 @@ const plugin: JupyterFrontEndPlugin<void> = {
           method: 'POST',
           body: formData
         })
-        .then(response => response.text())
-        .then(data => {
-          console.log('File uploaded successfully:', data);
+        .then(response => response.json())  // 假设后端返回 JSON 数据
+        .then(async data => {
+          console.log('Blueprint JSON received:', data);
+      
+          // 将返回的 blueprint.json 保存到当前目录下
+          const blueprintFileName = 'blueprint.json';
+          await documentManager.services.contents.save(`${currentPath}/${blueprintFileName}`, {
+            type: 'file',
+            format: 'text',
+            content: JSON.stringify(data, null, 2)  // 将 JSON 转换为字符串并保存
+          });
+      
+          console.log('blueprint.json 文件已保存到当前目录');
         })
         .catch(error => {
-          console.error('Error uploading file:', error);
+          console.error('Error uploading file or receiving blueprint.json:', error);
         });
-      }                             
+      }
+                                   
 
       createFormFields(): HTMLElement {
         const formContainer = document.createElement('div');
