@@ -347,12 +347,52 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const confirmButton = document.createElement('button');
         confirmButton.textContent = '确认蓝图';
         confirmButton.style.padding = '10px 20px';
-        confirmButton.onclick = () => {
+        confirmButton.onclick = async () => {
           console.log('确认蓝图按钮被点击');
+          await this.saveBlueprintAsTestJson(); // 保存用户编辑的内容
         };
 
         buttonContainer.appendChild(confirmButton);
         return buttonContainer;
+      }
+
+      // 新增：保存当前编辑内容为 test.json
+      async saveBlueprintAsTestJson(): Promise<void> {
+        const blueprintData = {
+          BLUEPRINT: (document.getElementById('blueprint') as HTMLInputElement).value,
+          NAME: (document.getElementById('name') as HTMLInputElement).value,
+          TYPE: (document.getElementById('type') as HTMLInputElement).value,
+          VERSION: (document.getElementById('version') as HTMLInputElement).value,
+          ENVIRONMENT: (document.getElementById('environment') as HTMLInputElement).value,
+          WORKDIR: (document.getElementById('workdir') as HTMLInputElement).value,
+          CMD: Array.from(document.getElementById('cmd-container')?.getElementsByTagName('input') || []).map(
+            (input: HTMLInputElement) => input.value
+          ),
+          DEPEND: Array.from(document.getElementById('depend-container')?.getElementsByTagName('input') || []).map(
+            (input: HTMLInputElement) => input.value
+          ),
+        };
+
+        const currentWidget = fileBrowserFactory.tracker.currentWidget;
+
+        if (!currentWidget) {
+          console.error('No file browser widget is currently open or focused.');
+          return;
+        }
+
+        const currentPath = currentWidget.model.path;
+        const testFileName = `${currentPath}/test.json`;
+
+        const documentManager = currentWidget.model.manager;
+
+        // 保存 test.json 文件
+        await documentManager.services.contents.save(testFileName, {
+          type: 'file',
+          format: 'text',
+          content: JSON.stringify(blueprintData, null, 2), // 将 JSON 格式化并保存
+        });
+
+        console.log('test.json 文件已保存到当前目录');
       }
     }
 
