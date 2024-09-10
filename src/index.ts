@@ -103,6 +103,34 @@ const plugin: JupyterFrontEndPlugin<void> = {
           (document.getElementById('environment') as HTMLInputElement).value = blueprintData['ENVIRONMENT'] || '';
           (document.getElementById('workdir') as HTMLInputElement).value = blueprintData['WORKDIR'] || '';
 
+          // 处理 CMD 部分
+          const cmdContainer = document.getElementById('cmd-container');
+          if (cmdContainer) {
+            cmdContainer.innerHTML = '';  // 清空现有内容
+
+            // CMD 是一个数组，循环创建输入框
+            blueprintData['CMD'].forEach((cmd: string) => {
+              const cmdRow = document.createElement('div');
+              cmdRow.style.display = 'flex';
+              cmdRow.style.alignItems = 'center';
+              cmdRow.style.marginBottom = '10px';
+
+              const input = document.createElement('input');
+              input.type = 'text';
+              input.style.flex = '1';
+              input.value = cmd;  // 设置输入框的值为当前 CMD
+
+              // 创建删除按钮
+              const removeButton = this.createRemoveButton(cmdRow);
+
+              cmdRow.appendChild(removeButton);
+              cmdRow.appendChild(input);
+              cmdContainer.appendChild(cmdRow);
+            });
+          } else {
+            console.error('CMD container not found.');
+          }
+
           // 处理 DEPEND 部分
           const dependContainer = document.getElementById('depend-container');
           if (dependContainer) {
@@ -119,34 +147,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
               input.style.flex = '1';
               input.value = depend;
 
+              // 创建删除按钮
+              const removeButton = this.createRemoveButton(dependRow);
+
+              dependRow.appendChild(removeButton);
               dependRow.appendChild(input);
               dependContainer.appendChild(dependRow);
             });
           } else {
             console.error('Depend container not found.');
-          }
-
-          // 处理 CMD 部分
-          const cmdContainer = document.getElementById('cmd-container');
-          if (cmdContainer) {
-            cmdContainer.innerHTML = '';  // 清空现有内容
-
-            blueprintData['CMD'].forEach((cmd: string) => {
-              const cmdRow = document.createElement('div');
-              cmdRow.style.display = 'flex';
-              cmdRow.style.alignItems = 'center';
-              cmdRow.style.marginBottom = '10px';
-
-              const input = document.createElement('input');
-              input.type = 'text';
-              input.style.flex = '1';
-              input.value = cmd;
-
-              cmdRow.appendChild(input);
-              cmdContainer.appendChild(cmdRow);
-            });
-          } else {
-            console.error('CMD container not found.');
           }
 
           console.log('Blueprint JSON parsed and loaded into the form.');
