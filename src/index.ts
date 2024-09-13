@@ -73,29 +73,23 @@ const plugin: JupyterFrontEndPlugin<void> = {
         return buttonRow;
       }
 
-      // 新增：加载 blueprint.json 文件并解析
       async loadBlueprintFile(): Promise<void> {
         const currentWidget = fileBrowserFactory.tracker.currentWidget;
 
-        // 检查 currentWidget 是否为 null
         if (!currentWidget) {
           console.error('No file browser widget is currently open or focused.');
           return;
         }
 
-        // 获取当前路径
         const currentPath = currentWidget.model.path;
         const blueprintFileName = `${currentPath}/blueprint.json`;
 
-        // 获取 document manager 服务
         const documentManager = currentWidget.model.manager;
 
         try {
-          // 获取 blueprint.json 文件的内容
           const blueprintFile = await documentManager.services.contents.get(blueprintFileName, { content: true });
           const blueprintData = JSON.parse(blueprintFile.content);
 
-          // 将 blueprint.json 中的值填充到相应的输入框
           (document.getElementById('blueprint') as HTMLInputElement).value = blueprintData['BLUEPRINT'] || '';
           (document.getElementById('name') as HTMLInputElement).value = blueprintData['NAME'] || '';
           (document.getElementById('type') as HTMLInputElement).value = blueprintData['TYPE'] || '';
@@ -103,59 +97,22 @@ const plugin: JupyterFrontEndPlugin<void> = {
           (document.getElementById('environment') as HTMLInputElement).value = blueprintData['ENVIRONMENT'] || '';
           (document.getElementById('workdir') as HTMLInputElement).value = blueprintData['WORKDIR'] || '';
 
-          // 处理 CMD 部分
           const cmdContainer = document.getElementById('cmd-container');
           if (cmdContainer) {
-            cmdContainer.innerHTML = '';  // 清空现有内容
-
-            // CMD 是一个数组，循环创建输入框
+            cmdContainer.innerHTML = '';  
             blueprintData['CMD'].forEach((cmd: string) => {
-              const cmdRow = document.createElement('div');
-              cmdRow.style.display = 'flex';
-              cmdRow.style.alignItems = 'center';
-              cmdRow.style.marginBottom = '10px';
-
-              const input = document.createElement('input');
-              input.type = 'text';
-              input.style.flex = '1';
-              input.value = cmd;  // 设置输入框的值为当前 CMD
-
-              // 创建删除按钮
-              const removeButton = this.createRemoveButton(cmdRow);
-
-              cmdRow.appendChild(removeButton);
-              cmdRow.appendChild(input);
+              const cmdRow = this.createRowWithInput(cmd);
               cmdContainer.appendChild(cmdRow);
             });
-          } else {
-            console.error('CMD container not found.');
           }
 
-          // 处理 DEPEND 部分
           const dependContainer = document.getElementById('depend-container');
           if (dependContainer) {
-            dependContainer.innerHTML = '';  // 清空现有内容
-
+            dependContainer.innerHTML = '';  
             blueprintData['DEPEND'].forEach((depend: string) => {
-              const dependRow = document.createElement('div');
-              dependRow.style.display = 'flex';
-              dependRow.style.alignItems = 'center';
-              dependRow.style.marginBottom = '10px';
-
-              const input = document.createElement('input');
-              input.type = 'text';
-              input.style.flex = '1';
-              input.value = depend;
-
-              // 创建删除按钮
-              const removeButton = this.createRemoveButton(dependRow);
-
-              dependRow.appendChild(removeButton);
-              dependRow.appendChild(input);
+              const dependRow = this.createRowWithInput(depend);
               dependContainer.appendChild(dependRow);
             });
-          } else {
-            console.error('Depend container not found.');
           }
 
           console.log('Blueprint JSON parsed and loaded into the form.');
@@ -167,19 +124,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
       async zipCurrentDirectory(): Promise<void> {
         const currentWidget = fileBrowserFactory.tracker.currentWidget;
 
-        // 检查 currentWidget 是否为 null
         if (!currentWidget) {
           console.error('No file browser widget is currently open or focused.');
           return;
         }
 
-        // 获取当前路径
         const currentPath = currentWidget.model.path;
-
-        // 获取 document manager 服务
         const documentManager = currentWidget.model.manager;
-
-        // 使用 services.contents 获取目录下的文件
         const fileItems = await documentManager.services.contents.get(currentPath);
 
         const zip = new JSZip();
@@ -187,43 +138,37 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         for (const item of fileItems.content) {
           if (item.type === 'file') {
-            // 获取文件内容
             const fileContent = await documentManager.services.contents.get(item.path, { content: true });
             folder.file(item.name, fileContent.content, { base64: true });
           }
         }
 
-        const zipContent = await zip.generateAsync({ type: "base64" }); // 生成Base64内容字符串
+        const zipContent = await zip.generateAsync({ type: "base64" });
         const zipFileName = 'test.zip';
 
-        // 保存压缩文件到当前目录
         await documentManager.services.contents.save(`${currentPath}/${zipFileName}`, {
           type: 'file',
           format: 'base64',
-          content: zipContent  // 这是正确的Base64编码字符串
+          content: zipContent  
         });
 
         console.log(`${zipFileName} 文件已生成`);
 
-        // 创建 FormData 并附加 zip 文件
         const formData = new FormData();
         formData.append('file', new Blob([zipContent], { type: 'application/zip' }), zipFileName);
 
-        // 发送请求到后端
         fetch('http://172.16.32.12:8080/upload', {
           method: 'POST',
           body: formData
         })
-          .then(response => response.json())  // 假设后端返回 JSON 数据
+          .then(response => response.json()) 
           .then(async data => {
             console.log('Blueprint JSON received:', data);
-
-            // 将返回的 blueprint.json 保存到当前目录下
             const blueprintFileName = 'blueprint.json';
             await documentManager.services.contents.save(`${currentPath}/${blueprintFileName}`, {
               type: 'file',
               format: 'text',
-              content: JSON.stringify(data, null, 2)  // 将 JSON 转换为字符串并保存
+              content: JSON.stringify(data, null, 2)
             });
 
             console.log('blueprint.json 文件已保存到当前目录');
@@ -259,8 +204,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           input.type = 'text';
           input.style.flex = '1';
           input.placeholder = field.placeholder;
-
-          input.id = field.label.toLowerCase(); // 设置 input 的 id，以便填充数据
+          input.id = field.label.toLowerCase(); 
 
           fieldRow.appendChild(label);
           fieldRow.appendChild(input);
@@ -291,10 +235,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
         container.appendChild(labelRow);
 
         const inputContainer = document.createElement('div');
-        inputContainer.id = containerId;  // 设置 id，用于填充数据
+        inputContainer.id = containerId;  
         container.appendChild(inputContainer);
-
-        this.addRow(inputContainer, sectionName);
 
         return container;
       }
@@ -305,10 +247,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
         button.classList.add('jp-AddButton');
         button.style.marginLeft = '10px';
         button.onclick = () => {
-          this.addRow(inputContainer, sectionName);
+          // 根据 sectionName 确定是 CMD 还是 DEPEND
+          if (sectionName === 'CMD') {
+            this.addRow(document.getElementById('cmd-container')!, 'CMD');
+          } else if (sectionName === 'DEPEND') {
+            this.addRow(document.getElementById('depend-container')!, 'DEPEND');
+          }
         };
         return button;
-      }
+      }      
 
       createRemoveButton(row: HTMLElement): HTMLButtonElement {
         const button = document.createElement('button');
@@ -326,18 +273,32 @@ const plugin: JupyterFrontEndPlugin<void> = {
         row.style.display = 'flex';
         row.style.alignItems = 'center';
         row.style.marginBottom = '10px';
-
+      
         const input = document.createElement('input');
         input.type = 'text';
         input.style.flex = '1';
         input.placeholder = `${sectionName} input...`;
-
+      
         const removeButton = this.createRemoveButton(row);
-
+      
         row.appendChild(removeButton);
         row.appendChild(input);
         inputContainer.appendChild(row);
-      }
+      
+        // 添加调试信息，确认新行已添加
+        console.log(`Added new ${sectionName} row`, input);
+      
+        // 修正选择器，确保捕获正确的输入框
+        const containerId = inputContainer.id; // 获取输入容器的 id
+        setTimeout(() => {
+          // 确保我们在正确的容器中选择输入框
+          if (containerId) {
+            console.log(`Current ${sectionName} inputs:`, document.querySelectorAll(`#${containerId} input`));
+          } else {
+            console.error('Invalid containerId:', containerId);
+          }
+        }, 100);
+      }      
 
       createConfirmButton(): HTMLElement {
         const buttonContainer = document.createElement('div');
@@ -349,14 +310,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
         confirmButton.style.padding = '10px 20px';
         confirmButton.onclick = async () => {
           console.log('确认蓝图按钮被点击');
-          await this.saveBlueprintAsTestJson(); // 保存用户编辑的内容
+          await this.saveBlueprintAsTestJson(); 
         };
 
         buttonContainer.appendChild(confirmButton);
         return buttonContainer;
       }
 
-      // 新增：保存当前编辑内容为 test.json
       async saveBlueprintAsTestJson(): Promise<void> {
         const blueprintData = {
           BLUEPRINT: (document.getElementById('blueprint') as HTMLInputElement).value,
@@ -365,13 +325,20 @@ const plugin: JupyterFrontEndPlugin<void> = {
           VERSION: (document.getElementById('version') as HTMLInputElement).value,
           ENVIRONMENT: (document.getElementById('environment') as HTMLInputElement).value,
           WORKDIR: (document.getElementById('workdir') as HTMLInputElement).value,
-          CMD: Array.from(document.getElementById('cmd-container')?.getElementsByTagName('input') || []).map(
-            (input: HTMLInputElement) => input.value
+          
+          // 动态获取所有 CMD 输入框的值
+          CMD: Array.from(document.querySelectorAll('#cmd-container input')).map(
+            input => (input as HTMLInputElement).value
           ),
-          DEPEND: Array.from(document.getElementById('depend-container')?.getElementsByTagName('input') || []).map(
-            (input: HTMLInputElement) => input.value
+          
+          // 动态获取所有 DEPEND 输入框的值
+          DEPEND: Array.from(document.querySelectorAll('#depend-container input')).map(
+            input => (input as HTMLInputElement).value
           ),
         };
+
+        console.log('Captured CMD values:', blueprintData.CMD);
+        console.log('Captured DEPEND values:', blueprintData.DEPEND);
 
         const currentWidget = fileBrowserFactory.tracker.currentWidget;
 
@@ -393,6 +360,25 @@ const plugin: JupyterFrontEndPlugin<void> = {
         });
 
         console.log('test.json 文件已保存到当前目录');
+      }
+
+      createRowWithInput(initialValue: string): HTMLElement {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.marginBottom = '10px';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.style.flex = '1';
+        input.value = initialValue;
+
+        const removeButton = this.createRemoveButton(row);
+
+        row.appendChild(removeButton);
+        row.appendChild(input);
+
+        return row;
       }
     }
 
