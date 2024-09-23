@@ -57,7 +57,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         parseCodeButton.textContent = '解析代码生成蓝图';
         parseCodeButton.onclick = async () => {
           console.log('解析代码生成蓝图按钮被点击');
-          await this.zipCurrentDirectory(); // 打包当前目录的文件
+          await this.zipAndSendCurrentDirectory(); // 打包并发送当前目录的文件
         };
 
         const parseLocalFileButton = document.createElement('button');
@@ -89,95 +89,85 @@ const plugin: JupyterFrontEndPlugin<void> = {
         try {
           const blueprintFile = await documentManager.services.contents.get(blueprintFileName, { content: true });
           const blueprintData = JSON.parse(blueprintFile.content);
-
-          (document.getElementById('blueprint') as HTMLInputElement).value = blueprintData['BLUEPRINT'] || '';
-          (document.getElementById('name') as HTMLInputElement).value = blueprintData['NAME'] || '';
-          (document.getElementById('type') as HTMLInputElement).value = blueprintData['TYPE'] || '';
-          (document.getElementById('version') as HTMLInputElement).value = blueprintData['VERSION'] || '';
-          (document.getElementById('environment') as HTMLInputElement).value = blueprintData['ENVIRONMENT'] || '';
-          (document.getElementById('workdir') as HTMLInputElement).value = blueprintData['WORKDIR'] || '';
-
-          const cmdContainer = document.getElementById('cmd-container');
-          if (cmdContainer) {
-            cmdContainer.innerHTML = '';  
-            blueprintData['CMD'].forEach((cmd: string) => {
-              const cmdRow = this.createRowWithInput(cmd);
-              cmdContainer.appendChild(cmdRow);
-            });
-          }
-
-          const dependContainer = document.getElementById('depend-container');
-          if (dependContainer) {
-            dependContainer.innerHTML = '';  
-            blueprintData['DEPEND'].forEach((depend: string) => {
-              const dependRow = this.createRowWithInput(depend);
-              dependContainer.appendChild(dependRow);
-            });
-          }
-
-          console.log('Blueprint JSON parsed and loaded into the form.');
+          this.parseBlueprintData(blueprintData);
         } catch (error) {
           console.error('Error loading blueprint.json:', error);
         }
       }
 
-      async zipCurrentDirectory(): Promise<void> {
+      async zipAndSendCurrentDirectory(): Promise<void> {
         const currentWidget = fileBrowserFactory.tracker.currentWidget;
-
+      
         if (!currentWidget) {
           console.error('No file browser widget is currently open or focused.');
           return;
         }
-
+      
         const currentPath = currentWidget.model.path;
         const documentManager = currentWidget.model.manager;
         const fileItems = await documentManager.services.contents.get(currentPath);
-
+      
         const zip = new JSZip();
         const folder = zip.folder("test")!;
-
+      
         for (const item of fileItems.content) {
           if (item.type === 'file') {
             const fileContent = await documentManager.services.contents.get(item.path, { content: true });
             folder.file(item.name, fileContent.content, { base64: true });
           }
         }
-
+      
         const zipContent = await zip.generateAsync({ type: "base64" });
         const zipFileName = 'test.zip';
-
-        await documentManager.services.contents.save(`${currentPath}/${zipFileName}`, {
-          type: 'file',
-          format: 'base64',
-          content: zipContent  
-        });
-
-        console.log(`${zipFileName} 文件已生成`);
-
+      
+        // 将 zip 文件发送到服务器
         const formData = new FormData();
         formData.append('file', new Blob([zipContent], { type: 'application/zip' }), zipFileName);
-
+      
         fetch('http://172.16.32.12:8080/upload', {
           method: 'POST',
           body: formData
         })
-          .then(response => response.json()) 
+          .then(response => response.json()) // 假设服务器返回 JSON 文件
           .then(async data => {
             console.log('Blueprint JSON received:', data);
-            const blueprintFileName = 'blueprint.json';
-            await documentManager.services.contents.save(`${currentPath}/${blueprintFileName}`, {
-              type: 'file',
-              format: 'text',
-              content: JSON.stringify(data, null, 2)
-            });
-
-            console.log('blueprint.json 文件已保存到当前目录');
+            await this.parseBlueprintData(data); // 解析并加载数据到表单
           })
           .catch(error => {
             console.error('Error uploading file or receiving blueprint.json:', error);
           });
       }
-
+      
+      // 解析返回的 Blueprint JSON 数据并加载到表单中
+      async parseBlueprintData(blueprintData: any): Promise<void> {
+        (document.getElementById('blueprint') as HTMLInputElement).value = blueprintData['BLUEPRINT'] || '';
+        (document.getElementById('name') as HTMLInputElement).value = blueprintData['NAME'] || '';
+        (document.getElementById('type') as HTMLInputElement).value = blueprintData['TYPE'] || '';
+        (document.getElementById('version') as HTMLInputElement).value = blueprintData['VERSION'] || '';
+        (document.getElementById('environment') as HTMLInputElement).value = blueprintData['ENVIRONMENT'] || '';
+        (document.getElementById('workdir') as HTMLInputElement).value = blueprintData['WORKDIR'] || '';
+      
+        const cmdContainer = document.getElementById('cmd-container');
+        if (cmdContainer) {
+          cmdContainer.innerHTML = '';  
+          blueprintData['CMD'].forEach((cmd: string) => {
+            const cmdRow = this.createRowWithInput(cmd);
+            cmdContainer.appendChild(cmdRow);
+          });
+        }
+      
+        const dependContainer = document.getElementById('depend-container');
+        if (dependContainer) {
+          dependContainer.innerHTML = '';  
+          blueprintData['DEPEND'].forEach((depend: string) => {
+            const dependRow = this.createRowWithInput(depend);
+            dependContainer.appendChild(dependRow);
+          });
+        }
+      
+        console.log('Blueprint JSON parsed and loaded into the form.');
+      }
+      
       createFormFields(): HTMLElement {
         const formContainer = document.createElement('div');
         const fields = [
@@ -325,42 +315,56 @@ const plugin: JupyterFrontEndPlugin<void> = {
           VERSION: (document.getElementById('version') as HTMLInputElement).value,
           ENVIRONMENT: (document.getElementById('environment') as HTMLInputElement).value,
           WORKDIR: (document.getElementById('workdir') as HTMLInputElement).value,
-          
-          // 动态获取所有 CMD 输入框的值
           CMD: Array.from(document.querySelectorAll('#cmd-container input')).map(
             input => (input as HTMLInputElement).value
           ),
-          
-          // 动态获取所有 DEPEND 输入框的值
           DEPEND: Array.from(document.querySelectorAll('#depend-container input')).map(
             input => (input as HTMLInputElement).value
           ),
         };
-
+      
         console.log('Captured CMD values:', blueprintData.CMD);
         console.log('Captured DEPEND values:', blueprintData.DEPEND);
-
+      
         const currentWidget = fileBrowserFactory.tracker.currentWidget;
-
+      
         if (!currentWidget) {
           console.error('No file browser widget is currently open or focused.');
           return;
         }
-
+      
         const currentPath = currentWidget.model.path;
-        const testFileName = `${currentPath}/test.json`;
-
+        const blueprintFileName = `${currentPath}/blueprint.json`;
+      
         const documentManager = currentWidget.model.manager;
-
-        // 保存 test.json 文件
-        await documentManager.services.contents.save(testFileName, {
-          type: 'file',
-          format: 'text',
-          content: JSON.stringify(blueprintData, null, 2), // 将 JSON 格式化并保存
-        });
-
-        console.log('test.json 文件已保存到当前目录');
+      
+        // 生成 JSON 文件
+        const jsonData = JSON.stringify(blueprintData, null, 2);
+      
+        // 将 JSON 数据发送到服务器
+        const formData = new FormData();
+        formData.append('file', new Blob([jsonData], { type: 'application/json' }), 'blueprint.json');
+      
+        fetch('http://172.16.32.12:8080/blueprint', {
+          method: 'POST',
+          body: formData
+        })
+          .then(response => response.json())
+          .then(async (serverData) => {
+            // 将服务器返回的 blueprint.json 文件保存到当前目录
+            await documentManager.services.contents.save(blueprintFileName, {
+              type: 'file',
+              format: 'text',
+              content: JSON.stringify(serverData, null, 2), // 格式化保存服务器返回的 blueprint.json
+            });
+      
+            console.log('服务器返回的 blueprint.json 文件已保存到当前目录');
+          })
+          .catch(error => {
+            console.error('Error uploading blueprint or receiving response:', error);
+          });
       }
+      
 
       createRowWithInput(initialValue: string): HTMLElement {
         const row = document.createElement('div');
