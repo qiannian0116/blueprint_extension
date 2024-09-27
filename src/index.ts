@@ -5,6 +5,8 @@ import { fileIcon } from '@jupyterlab/ui-components';
 import { IFileBrowserFactory } from '@jupyterlab/filebrowser';
 import JSZip from 'jszip';
 
+import { SERVER_CONFIG } from './config';
+
 /**
  * Initialization data for the jupyterlab_dynamic extension.
  */
@@ -81,8 +83,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
-        const currentPath = currentWidget.model.path;
-        const blueprintFileName = `${currentPath}/blueprint.json`;
+        // 获取当前路径
+        let currentPath = currentWidget.model.path;
+
+        // 获取当前路径的父目录
+        const parentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
+
+        // 构造父目录中的 blueprint.json 文件路径
+        const blueprintFileName = `${parentPath}/blueprint.json`;
 
         const documentManager = currentWidget.model.manager;
 
@@ -124,7 +132,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const formData = new FormData();
         formData.append('file', new Blob([zipContent], { type: 'application/zip' }), zipFileName);
       
-        fetch('http://172.16.32.12:8080/upload', {
+        fetch(SERVER_CONFIG.UPLOAD_URL, {
           method: 'POST',
           body: formData
         })
@@ -140,6 +148,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       
       // 解析返回的 Blueprint JSON 数据并加载到表单中
       async parseBlueprintData(blueprintData: any): Promise<void> {
+        // 解析 BLUEPRINT, NAME, TYPE, VERSION, ENVIRONMENT, WORKDIR 部分
         (document.getElementById('blueprint') as HTMLInputElement).value = blueprintData['BLUEPRINT'] || '';
         (document.getElementById('name') as HTMLInputElement).value = blueprintData['NAME'] || '';
         (document.getElementById('type') as HTMLInputElement).value = blueprintData['TYPE'] || '';
@@ -147,6 +156,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         (document.getElementById('environment') as HTMLInputElement).value = blueprintData['ENVIRONMENT'] || '';
         (document.getElementById('workdir') as HTMLInputElement).value = blueprintData['WORKDIR'] || '';
       
+        // 解析 CMD 部分
         const cmdContainer = document.getElementById('cmd-container');
         if (cmdContainer) {
           cmdContainer.innerHTML = '';  
@@ -156,17 +166,81 @@ const plugin: JupyterFrontEndPlugin<void> = {
           });
         }
       
+        // 解析 DEPEND 部分
         const dependContainer = document.getElementById('depend-container');
         if (dependContainer) {
-          dependContainer.innerHTML = '';  
+          dependContainer.innerHTML = '';  // 清空之前的内容
+      
           blueprintData['DEPEND'].forEach((depend: string) => {
-            const dependRow = this.createRowWithInput(depend);
-            dependContainer.appendChild(dependRow);
+            // 解析类似 "[BASE] python [3.10]" 的字符串
+            const regex = /^\[(BASE|PYTHON|LOCAL)\]\s+(\S+)\s+\[(.*)\]$/;
+            const match = depend.match(regex);
+            if (match) {
+              const category = match[1]; // BASE, PYTHON, LOCAL
+              const dependencyName = match[2]; // python, numpy, torch, etc.
+              const version = match[3]; // 版本信息或路径
+      
+              const dependRow = this.createDependRow(category, dependencyName, version);
+              dependContainer.appendChild(dependRow);
+            } else {
+              console.error('DEPEND format not recognized:', depend);
+            }
           });
         }
       
         console.log('Blueprint JSON parsed and loaded into the form.');
       }
+      
+      // 新增 createDependRow 方法，用于创建带下拉菜单和文本框的行
+      createDependRow(category: string, dependencyName: string, version: string): HTMLElement {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.marginBottom = '10px';
+      
+        // 创建下拉菜单
+        const select = document.createElement('select');
+        const options = ['BASE', 'PYTHON', 'LOCAL'];
+        options.forEach(option => {
+          const opt = document.createElement('option');
+          opt.value = option;
+          opt.textContent = option;
+          if (option === category) {
+            opt.selected = true;  // 根据解析的值预先选择
+          }
+          select.appendChild(opt);
+        });
+        select.style.marginRight = '10px';
+        select.style.width = '60px';
+      
+        // 创建文本框1，显示依赖项名称
+        const input1 = document.createElement('input');
+        input1.type = 'text';
+        input1.style.flex = '1';
+        input1.placeholder = '输入依赖项...';
+        input1.value = dependencyName;  // 设置解析的依赖名称
+        input1.style.marginRight = '10px';
+        input1.style.width = '60px';
+      
+        // 创建文本框2，显示版本或路径
+        const input2 = document.createElement('input');
+        input2.type = 'text';
+        input2.style.flex = '1';
+        input2.placeholder = '额外信息...';
+        input2.value = version;  // 设置解析的版本或路径
+        input2.style.width = '60px';
+      
+        const removeButton = this.createRemoveButton(row);
+        
+        // 将各部分加入行
+        row.appendChild(removeButton);
+        row.appendChild(select);
+        row.appendChild(input1);
+        row.appendChild(input2);
+      
+        return row;
+      }
+      
       
       createFormFields(): HTMLElement {
         const formContainer = document.createElement('div');
@@ -263,20 +337,59 @@ const plugin: JupyterFrontEndPlugin<void> = {
         row.style.display = 'flex';
         row.style.alignItems = 'center';
         row.style.marginBottom = '10px';
-      
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.style.flex = '1';
-        input.placeholder = `${sectionName} input...`;
-      
-        const removeButton = this.createRemoveButton(row);
-      
-        row.appendChild(removeButton);
-        row.appendChild(input);
+
+        if (sectionName === 'DEPEND') {
+          // 如果是 DEPEND 部分，生成一个下拉框和两个文本框
+
+          // 创建下拉菜单
+          const select = document.createElement('select');
+          const options = ['BASE', 'PYTHON', 'LOCAL'];
+          options.forEach(option => {
+            const opt = document.createElement('option');
+            opt.value = option;
+            opt.textContent = option;
+            select.appendChild(opt);
+          });
+          select.style.marginRight = '10px'; // 添加右边距
+          select.style.width = '60px'; // 设置宽度
+
+          // 创建文本框1
+          const input1 = document.createElement('input');
+          input1.type = 'text';
+          input1.style.flex = '1';
+          input1.placeholder = '输入依赖项...';
+          input1.style.marginRight = '10px'; // 添加右边距
+          input1.style.width = '60px'; // 设置宽度
+
+          // 创建文本框2
+          const input2 = document.createElement('input');
+          input2.type = 'text';
+          input2.style.flex = '1';
+          input2.placeholder = '额外信息...';
+          input2.style.width = '60px'; // 设置宽度
+
+          const removeButton = this.createRemoveButton(row);
+          
+          row.appendChild(removeButton);
+          row.appendChild(select);
+          row.appendChild(input1);
+          row.appendChild(input2);
+        } else {
+          // 如果是 CMD 部分，保持原有的单个文本框布局
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.style.flex = '1';
+          input.placeholder = `${sectionName} input...`;
+
+          const removeButton = this.createRemoveButton(row);
+
+          row.appendChild(removeButton);
+          row.appendChild(input);
+        }
         inputContainer.appendChild(row);
       
         // 添加调试信息，确认新行已添加
-        console.log(`Added new ${sectionName} row`, input);
+        console.log(`Added new ${sectionName} row`, row);
       
         // 修正选择器，确保捕获正确的输入框
         const containerId = inputContainer.id; // 获取输入容器的 id
@@ -318,9 +431,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
           CMD: Array.from(document.querySelectorAll('#cmd-container input')).map(
             input => (input as HTMLInputElement).value
           ),
-          DEPEND: Array.from(document.querySelectorAll('#depend-container input')).map(
-            input => (input as HTMLInputElement).value
-          ),
+          DEPEND: Array.from(document.querySelectorAll('#depend-container > div')).map(row => {
+            const select = row.querySelector('select') as HTMLSelectElement;
+            const input1 = row.querySelectorAll('input')[0] as HTMLInputElement; // 依赖项名称
+            const input2 = row.querySelectorAll('input')[1] as HTMLInputElement; // 版本或路径信息
+      
+            // 生成类似 "[BASE] python [3.10]" 的格式
+            return `[${select.value}] ${input1.value} [${input2.value}]`;
+          }),
         };
       
         console.log('Captured CMD values:', blueprintData.CMD);
@@ -332,10 +450,16 @@ const plugin: JupyterFrontEndPlugin<void> = {
           console.error('No file browser widget is currently open or focused.');
           return;
         }
-      
-        const currentPath = currentWidget.model.path;
-        const blueprintFileName = `${currentPath}/blueprint.json`;
-      
+            
+        // 获取当前路径
+        let currentPath = currentWidget.model.path;
+
+        // 获取当前路径的父目录
+        const parentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
+
+        // 构造父目录中的 blueprint.json 文件路径
+        const blueprintFileName = `${parentPath}/blueprint.json`;
+
         const documentManager = currentWidget.model.manager;
       
         // 生成 JSON 文件
@@ -345,7 +469,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const formData = new FormData();
         formData.append('file', new Blob([jsonData], { type: 'application/json' }), 'blueprint.json');
       
-        fetch('http://172.16.32.12:8080/blueprint', {
+        fetch(SERVER_CONFIG.BLUEPRINT_URL, {
           method: 'POST',
           body: formData
         })
@@ -364,7 +488,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
             console.error('Error uploading blueprint or receiving response:', error);
           });
       }
-      
 
       createRowWithInput(initialValue: string): HTMLElement {
         const row = document.createElement('div');
