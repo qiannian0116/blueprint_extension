@@ -38,12 +38,16 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const formContainer = this.createFormFields();
         layout.addWidget(new Widget({ node: formContainer }));
 
-        // 动态创建 CMD 和 DEPEND 容器
+        // 动态创建 ENVVAR、CMD 、DEPEND 和 CONTEXT 容器
+        const envvarContainer = this.createSection('ENVVAR', 'envvar-container');
         const cmdContainer = this.createSection('CMD', 'cmd-container');
         const dependContainer = this.createSection('DEPEND', 'depend-container');
+        const contextContainer = this.createSection('CONTEXT', 'context-container');
 
+        layout.addWidget(new Widget({ node: envvarContainer }));
         layout.addWidget(new Widget({ node: cmdContainer }));
         layout.addWidget(new Widget({ node: dependContainer }));
+        layout.addWidget(new Widget({ node: contextContainer }));
 
         const confirmButton = this.createConfirmButton();
         layout.addWidget(new Widget({ node: confirmButton }));
@@ -156,6 +160,16 @@ const plugin: JupyterFrontEndPlugin<void> = {
         (document.getElementById('environment') as HTMLInputElement).value = blueprintData['ENVIRONMENT'] || '';
         (document.getElementById('workdir') as HTMLInputElement).value = blueprintData['WORKDIR'] || '';
       
+        // 解析 ENVVAR 部分
+        const envvarContainer = document.getElementById('envvar-container');
+        if (envvarContainer) {
+          envvarContainer.innerHTML = '';  // 清空之前的内容
+          blueprintData['ENVVAR'].forEach((envvar: string) => {
+            const envvarRow = this.createRowWithInput(envvar);
+            envvarContainer.appendChild(envvarRow);
+          });
+        }
+
         // 解析 CMD 部分
         const cmdContainer = document.getElementById('cmd-container');
         if (cmdContainer) {
@@ -173,10 +187,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
       
           blueprintData['DEPEND'].forEach((depend: string) => {
             // 解析类似 "[BASE] python [3.10]" 的字符串
-            const regex = /^\[(BASE|PYTHON|LOCAL)\]\s+(\S+)\s+\[(.*)\]$/;
+            const regex = /^\[(PYTHON|LOCAL|PyPI|Apt|DockerHub)\]\s+(\S+)\s+\[(.*)\]$/;
             const match = depend.match(regex);
             if (match) {
-              const category = match[1]; // BASE, PYTHON, LOCAL
+              const category = match[1]; // PYTHON, LOCAL, PyPI, Apt, DockerHub
               const dependencyName = match[2]; // python, numpy, torch, etc.
               const version = match[3]; // 版本信息或路径
       
@@ -185,6 +199,16 @@ const plugin: JupyterFrontEndPlugin<void> = {
             } else {
               console.error('DEPEND format not recognized:', depend);
             }
+          });
+        }
+
+        // 解析 CONTEXT 部分
+        const contextContainer = document.getElementById('context-container');
+        if (contextContainer) {
+          contextContainer.innerHTML = '';  
+          blueprintData['CONTEXT'].forEach((context: string) => {
+            const contextRow = this.createRowWithInput(context);
+            contextContainer.appendChild(contextRow);
           });
         }
       
@@ -200,7 +224,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       
         // 创建下拉菜单
         const select = document.createElement('select');
-        const options = ['BASE', 'PYTHON', 'LOCAL'];
+        const options = ['PYTHON', 'LOCAL', 'PyPI', 'Apt', 'DockerHub'];
         options.forEach(option => {
           const opt = document.createElement('option');
           opt.value = option;
@@ -311,11 +335,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
         button.classList.add('jp-AddButton');
         button.style.marginLeft = '10px';
         button.onclick = () => {
-          // 根据 sectionName 确定是 CMD 还是 DEPEND
-          if (sectionName === 'CMD') {
+          // 根据 sectionName 确定是 ENVVAR、CMD 、 DEPEND 还是 CONTEXT
+          if (sectionName === 'ENVVAR') {
+            this.addRow(document.getElementById('envvar-container')!, 'ENVVAR');
+          } else if (sectionName === 'CMD') {
             this.addRow(document.getElementById('cmd-container')!, 'CMD');
           } else if (sectionName === 'DEPEND') {
             this.addRow(document.getElementById('depend-container')!, 'DEPEND');
+          } else if (sectionName === 'CONTEXT') {
+            this.addRow(document.getElementById('context-container')!, 'CONTEXT');
           }
         };
         return button;
@@ -343,7 +371,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
           // 创建下拉菜单
           const select = document.createElement('select');
-          const options = ['BASE', 'PYTHON', 'LOCAL'];
+          const options = ['PYTHON', 'LOCAL', 'PyPI', 'Apt', 'DockerHub'];
           options.forEach(option => {
             const opt = document.createElement('option');
             opt.value = option;
@@ -374,8 +402,30 @@ const plugin: JupyterFrontEndPlugin<void> = {
           row.appendChild(select);
           row.appendChild(input1);
           row.appendChild(input2);
-        } else {
+        } else if (sectionName === 'CMD') {
           // 如果是 CMD 部分，保持原有的单个文本框布局
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.style.flex = '1';
+          input.placeholder = `${sectionName} input...`;
+
+          const removeButton = this.createRemoveButton(row);
+
+          row.appendChild(removeButton);
+          row.appendChild(input);
+        } else if (sectionName === 'CONTEXT') {
+          // 如果是 CONTEXT 部分，保持原有的单个文本框布局
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.style.flex = '1';
+          input.placeholder = `${sectionName} input...`;
+
+          const removeButton = this.createRemoveButton(row);
+
+          row.appendChild(removeButton);
+          row.appendChild(input);
+        } else if (sectionName === 'ENVVAR') {
+          // 如果是 ENVVAR 部分，保持原有的单个文本框布局
           const input = document.createElement('input');
           input.type = 'text';
           input.style.flex = '1';
@@ -428,6 +478,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
           VERSION: (document.getElementById('version') as HTMLInputElement).value,
           ENVIRONMENT: (document.getElementById('environment') as HTMLInputElement).value,
           WORKDIR: (document.getElementById('workdir') as HTMLInputElement).value,
+          ENVVAR: Array.from(document.querySelectorAll('#envvar-container input')).map(
+            input => (input as HTMLInputElement).value
+          ),
           CMD: Array.from(document.querySelectorAll('#cmd-container input')).map(
             input => (input as HTMLInputElement).value
           ),
@@ -439,10 +492,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
             // 生成类似 "[BASE] python [3.10]" 的格式
             return `[${select.value}] ${input1.value} [${input2.value}]`;
           }),
+          CONTEXT: Array.from(document.querySelectorAll('#context-container input')).map(
+            input => (input as HTMLInputElement).value
+          )
         };
       
+        console.log('Captured ENVVAR values:', blueprintData.ENVVAR);
         console.log('Captured CMD values:', blueprintData.CMD);
         console.log('Captured DEPEND values:', blueprintData.DEPEND);
+        console.log('Captured CONTEXT values:', blueprintData.CONTEXT);
       
         const currentWidget = fileBrowserFactory.tracker.currentWidget;
       
@@ -513,7 +571,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     app.shell.add(dynamicPanel, 'right');
 
     app.commands.addCommand('dynamic:open', {
-      label: 'Open Dynamic CMD/DEPEND Panel',
+      label: 'Open Dynamic ENVVAR/CMD/DEPEND/CONTEXT Panel',
       execute: () => {
         if (!dynamicPanel.isAttached) {
           app.shell.add(dynamicPanel, 'right');
