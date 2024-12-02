@@ -152,71 +152,79 @@ const plugin: JupyterFrontEndPlugin<void> = {
       
       // 解析返回的 Blueprint JSON 数据并加载到表单中
       async parseBlueprintData(blueprintData: any): Promise<void> {
-        // 解析 BLUEPRINT, NAME, TYPE, VERSION, ENVIRONMENT, WORKDIR, DEPLOYABILITY 部分
+        // 解析 BLUEPRINT, NAME, TYPE, VERSION, ENVIRONMENT, WORKDIR 部分
         (document.getElementById('blueprint') as HTMLInputElement).value = blueprintData['BLUEPRINT'] || '';
         (document.getElementById('name') as HTMLInputElement).value = blueprintData['NAME'] || '';
         (document.getElementById('type') as HTMLInputElement).value = blueprintData['TYPE'] || '';
         (document.getElementById('version') as HTMLInputElement).value = blueprintData['VERSION'] || '';
         (document.getElementById('environment') as HTMLInputElement).value = blueprintData['ENVIRONMENT'] || '';
         (document.getElementById('workdir') as HTMLInputElement).value = blueprintData['WORKDIR'] || '';
-        (document.getElementById('deployability') as HTMLInputElement).value = blueprintData['DEPLOYABILITY'] || '';
-
+    
         // 解析 ENVVAR 部分
         const envvarContainer = document.getElementById('envvar-container');
         if (envvarContainer) {
-          envvarContainer.innerHTML = '';  // 清空之前的内容
-          blueprintData['ENVVAR'].forEach((envvar: string) => {
-            // 拆分 envvar 字符串，格式为 "KEY=VALUE"
-            const [key, value] = envvar.split('=');
-            const envvarRow = this.createEnvVarRow(key || '', value || '');
-            envvarContainer.appendChild(envvarRow);
-          });
+            envvarContainer.innerHTML = ''; // 清空之前的内容
+            blueprintData['ENVVAR'].forEach((envvar: string) => {
+                const [key, value] = envvar.split('=');
+                const envvarRow = this.createEnvVarRow(key || '', value || '');
+                envvarContainer.appendChild(envvarRow);
+            });
         }
-
+    
         // 解析 CMD 部分
         const cmdContainer = document.getElementById('cmd-container');
         if (cmdContainer) {
-          cmdContainer.innerHTML = '';  
-          blueprintData['CMD'].forEach((cmd: string) => {
-            const cmdRow = this.createRowWithInput(cmd);
-            cmdContainer.appendChild(cmdRow);
-          });
+            cmdContainer.innerHTML = '';
+            blueprintData['CMD'].forEach((cmd: string) => {
+                const cmdRow = this.createRowWithInput(cmd);
+                cmdContainer.appendChild(cmdRow);
+            });
         }
-      
+    
         // 解析 DEPEND 部分
         const dependContainer = document.getElementById('depend-container');
         if (dependContainer) {
-          dependContainer.innerHTML = '';  // 清空之前的内容
-      
+          dependContainer.innerHTML = ''; // 清空之前的内容
           blueprintData['DEPEND'].forEach((depend: string) => {
-            // 解析类似 "[BASE] python [3.10]" 的字符串
-            const regex = /^\[(PYTHON|LOCAL|PyPI|Apt|DockerHub)\]\s+(\S+)\s+\[(.*)\]$/;
-            const match = depend.match(regex);
-            if (match) {
-              const category = match[1]; // PYTHON, LOCAL, PyPI, Apt, DockerHub
-              const dependencyName = match[2]; // python, numpy, torch, etc.
-              const version = match[3]; // 版本信息或路径
+              // 根据前缀 `-` 或 `|` 判断行类型
+              const isFiveFieldRow = depend.startsWith('|');
+              const cleanedDepend = depend.slice(2).trim(); // 去掉前缀
+              const regex = /^\[(PYTHON|LOCAL|PyPI|Apt|DockerHub)\]\s+(\S+)\s+\[(.*)\](?:\s+\{([^{}]*)\})?(?:\s+\{([^{}]*)\})?$/;
+              const match = cleanedDepend.match(regex);
+              if (match) {
+                  const category = match[1]; // PYTHON, LOCAL, PyPI, Apt, DockerHub
+                  const dependencyName = match[2]; // 依赖名称
+                  const version = match[3]; // 版本或路径信息
+                  const condition1 = match[4] || ''; // 第一个条件内容（无括号）
+                  const condition2 = match[5] || ''; // 第二个条件内容（无括号）
       
-              const dependRow = this.createDependRow(category, dependencyName, version);
-              dependContainer.appendChild(dependRow);
-            } else {
-              console.error('DEPEND format not recognized:', depend);
-            }
+                  if (isFiveFieldRow) {
+                      // 五字段行
+                      const dependRow = this.createAdditionalDependRow(category, dependencyName, version, condition1, condition2);
+                      dependContainer.appendChild(dependRow);
+                  } else {
+                      // 三字段行
+                      const dependRow = this.createDependRow(category, dependencyName, version);
+                      dependContainer.appendChild(dependRow);
+                  }
+              } else {
+                  console.error('DEPEND format not recognized:', depend);
+              }
           });
-        }
-
+        }      
+    
         // 解析 CONTEXT 部分
         const contextContainer = document.getElementById('context-container');
         if (contextContainer) {
-          contextContainer.innerHTML = '';  
-          blueprintData['CONTEXT'].forEach((context: string) => {
-            const contextRow = this.createRowWithInput(context);
-            contextContainer.appendChild(contextRow);
-          });
+            contextContainer.innerHTML = '';
+            blueprintData['CONTEXT'].forEach((context: string) => {
+                const contextRow = this.createRowWithInput(context);
+                contextContainer.appendChild(contextRow);
+            });
         }
-      
+    
         console.log('Blueprint JSON parsed and loaded into the form.');
-      }
+      }    
       
       // 新增 createDependRow 方法，用于创建带下拉菜单和文本框的行
       createDependRow(category: string, dependencyName: string, version: string): HTMLElement {
@@ -224,6 +232,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
         row.style.display = 'flex';
         row.style.alignItems = 'center';
         row.style.marginBottom = '10px';
+    
+        // 创建行前缀 `-`
+        const prefix = document.createElement('span');
+        prefix.textContent = '-';
+        prefix.style.marginRight = '10px';
+        prefix.style.fontWeight = 'bold';
     
         // 创建下拉菜单
         const select = document.createElement('select');
@@ -233,7 +247,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             opt.value = option;
             opt.textContent = option;
             if (option === category) {
-                opt.selected = true; // 根据解析的值预先选择
+                opt.selected = true; // 根据解析值预先选择
             }
             select.appendChild(opt);
         });
@@ -244,27 +258,25 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const input1 = document.createElement('input');
         input1.type = 'text';
         input1.style.flex = '1';
-        input1.placeholder = '输入依赖项...';
+        input1.placeholder = 'Dependency input...';
         input1.value = dependencyName;
         input1.style.marginRight = '10px';
-        input1.style.width = '60px';
     
         // 创建第二个文本框
         const input2 = document.createElement('input');
         input2.type = 'text';
         input2.style.flex = '1';
-        input2.placeholder = '额外信息...';
+        input2.placeholder = 'Version input...';
         input2.value = version;
         input2.style.marginRight = '10px';
-        input2.style.width = '60px';
     
-        // 创建加号按钮
+        // 创建加号按钮，用于生成五字段行
         const addButton = document.createElement('button');
         addButton.textContent = '+';
-        addButton.classList.add('jp-AddButton');
         addButton.style.marginRight = '10px';
+        addButton.classList.add('jp-AddButton');
         addButton.onclick = () => {
-            // 在当前行下面插入一行
+            // 点击加号按钮后生成一行五字段
             const newRow = this.createAdditionalDependRow(category, '', '', '', '');
             row.parentElement?.insertBefore(newRow, row.nextSibling);
         };
@@ -274,13 +286,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
     
         // 将所有元素添加到行中
         row.appendChild(removeButton);
+        row.appendChild(prefix);
         row.appendChild(select);
         row.appendChild(input1);
         row.appendChild(input2);
         row.appendChild(addButton);
     
         return row;
-    }
+      }    
     
     // 创建新行的方法，包含五个文本框
     createAdditionalDependRow(category: string, dependencyName: string, version: string, extraField1: string, extraField2: string): HTMLElement {
@@ -289,9 +302,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
       row.style.alignItems = 'center';
       row.style.marginBottom = '10px';
   
-      // 创建与主行相同的前三个输入
+      // 创建行前缀 `|`
+      const prefix = document.createElement('span');
+      prefix.textContent = '|';
+      prefix.style.marginRight = '10px';
+      prefix.style.fontWeight = 'bold';
+  
+      // 创建前三个字段
       const select = document.createElement('select');
-      const options = ['PYTHON', 'LOCAL', 'PyPI', 'Apt', 'DockerHub'];
+      const options = ['PYTHON', 'LOCAL', 'PyPi', 'Apt', 'DockerHub'];
       options.forEach(option => {
           const opt = document.createElement('option');
           opt.value = option;
@@ -307,53 +326,43 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const input1 = document.createElement('input');
       input1.type = 'text';
       input1.style.flex = '1';
-      input1.placeholder = '输入依赖项...';
+      input1.placeholder = 'Dependency input...';
       input1.value = dependencyName;
       input1.style.marginRight = '10px';
   
       const input2 = document.createElement('input');
       input2.type = 'text';
       input2.style.flex = '1';
-      input2.placeholder = '额外信息...';
+      input2.placeholder = 'Version input...';
       input2.value = version;
       input2.style.marginRight = '10px';
   
-      // 新增的两个文本框
+      // 创建第四字段
       const input3 = document.createElement('input');
       input3.type = 'text';
       input3.style.flex = '1';
-      input3.placeholder = '额外输入1...';
+      input3.placeholder = 'Alternative input...';
       input3.value = extraField1;
       input3.style.marginRight = '10px';
   
+      // 创建第五字段
       const input4 = document.createElement('input');
       input4.type = 'text';
       input4.style.flex = '1';
-      input4.placeholder = '额外输入2...';
+      input4.placeholder = 'Deployability input...';
       input4.value = extraField2;
-  
-      // 创建加号按钮
-      const addButton = document.createElement('button');
-      addButton.textContent = '+';
-      addButton.classList.add('jp-AddButton');
-      addButton.style.marginRight = '10px';
-      addButton.onclick = () => {
-          // 在当前行下面插入一个新行
-          const newRow = this.createAdditionalDependRow('', '', '', '', '');
-          row.parentElement?.insertBefore(newRow, row.nextSibling);
-      };
   
       // 创建移除按钮
       const removeButton = this.createRemoveButton(row);
   
       // 将所有元素添加到行中
       row.appendChild(removeButton);
+      row.appendChild(prefix);
       row.appendChild(select);
       row.appendChild(input1);
       row.appendChild(input2);
       row.appendChild(input3);
       row.appendChild(input4);
-      row.appendChild(addButton);
   
       return row;
     }
@@ -460,6 +469,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
         row.style.marginBottom = '10px';
     
         if (sectionName === 'DEPEND') {
+            // 创建行前缀 `-`
+            const prefix = document.createElement('span');
+            prefix.textContent = '-';
+            prefix.style.marginRight = '10px';
+            prefix.style.fontWeight = 'bold';
+
             // 创建下拉菜单
             const select = document.createElement('select');
             const options = ['PYTHON', 'LOCAL', 'PyPI', 'Apt', 'DockerHub'];
@@ -476,7 +491,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             const input1 = document.createElement('input');
             input1.type = 'text';
             input1.style.flex = '1';
-            input1.placeholder = '输入依赖项...';
+            input1.placeholder = 'Dependency input...';
             input1.style.marginRight = '10px'; // 添加右边距
             input1.style.width = '60px'; // 设置宽度
     
@@ -484,7 +499,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             const input2 = document.createElement('input');
             input2.type = 'text';
             input2.style.flex = '1';
-            input2.placeholder = '额外信息...';
+            input2.placeholder = 'Version input...';
             input2.style.marginRight = '10px'; // 添加右边距
             input2.style.width = '60px'; // 设置宽度
     
@@ -504,6 +519,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     
             // 将各部分加入行
             row.appendChild(removeButton);
+            row.appendChild(prefix);
             row.appendChild(select);
             row.appendChild(input1);
             row.appendChild(input2);
@@ -566,9 +582,19 @@ const plugin: JupyterFrontEndPlugin<void> = {
             const select = row.querySelector('select') as HTMLSelectElement;
             const input1 = row.querySelectorAll('input')[0] as HTMLInputElement; // 依赖项名称
             const input2 = row.querySelectorAll('input')[1] as HTMLInputElement; // 版本或路径信息
-      
-            // 生成类似 "[BASE] python [3.10]" 的格式
-            return `[${select.value}] ${input1.value} [${input2.value}]`;
+            const input3 = row.querySelectorAll('input')[2] as HTMLInputElement; // 第一个条件（仅五字段行有）
+            const input4 = row.querySelectorAll('input')[3] as HTMLInputElement; // 第二个条件（仅五字段行有）
+        
+            // 判断是否是五字段行
+            const isFiveFieldRow = row.querySelectorAll('input').length === 4;
+        
+            if (isFiveFieldRow) {
+                // 五字段行：生成格式 "| [CATEGORY] dependency [version] {condition1} {condition2}"
+                return `| [${select.value}] ${input1.value} [${input2.value}] {${input3.value}} {${input4.value}}`;
+            } else {
+                // 三字段行：生成格式 "- [CATEGORY] dependency [version]"
+                return `- [${select.value}] ${input1.value} [${input2.value}]`;
+            }
           }),
           CONTEXT: Array.from(document.querySelectorAll('#context-container input')).map(
             input => (input as HTMLInputElement).value
