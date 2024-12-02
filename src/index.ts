@@ -159,13 +159,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
         (document.getElementById('version') as HTMLInputElement).value = blueprintData['VERSION'] || '';
         (document.getElementById('environment') as HTMLInputElement).value = blueprintData['ENVIRONMENT'] || '';
         (document.getElementById('workdir') as HTMLInputElement).value = blueprintData['WORKDIR'] || '';
-      
+
         // 解析 ENVVAR 部分
         const envvarContainer = document.getElementById('envvar-container');
         if (envvarContainer) {
           envvarContainer.innerHTML = '';  // 清空之前的内容
           blueprintData['ENVVAR'].forEach((envvar: string) => {
-            const envvarRow = this.createRowWithInput(envvar);
+            // 拆分 envvar 字符串，格式为 "KEY=VALUE"
+            const [key, value] = envvar.split('=');
+            const envvarRow = this.createEnvVarRow(key || '', value || '');
             envvarContainer.appendChild(envvarRow);
           });
         }
@@ -425,16 +427,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
           row.appendChild(removeButton);
           row.appendChild(input);
         } else if (sectionName === 'ENVVAR') {
-          // 如果是 ENVVAR 部分，保持原有的单个文本框布局
-          const input = document.createElement('input');
-          input.type = 'text';
-          input.style.flex = '1';
-          input.placeholder = `${sectionName} input...`;
+          // 如果是 ENVVAR 部分，包含两个文本框并用 = 连接
+          const envvarRow = this.createEnvVarRow();
 
-          const removeButton = this.createRemoveButton(row);
-
-          row.appendChild(removeButton);
-          row.appendChild(input);
+          row.appendChild(envvarRow);
         }
         inputContainer.appendChild(row);
       
@@ -478,9 +474,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
           VERSION: (document.getElementById('version') as HTMLInputElement).value,
           ENVIRONMENT: (document.getElementById('environment') as HTMLInputElement).value,
           WORKDIR: (document.getElementById('workdir') as HTMLInputElement).value,
-          ENVVAR: Array.from(document.querySelectorAll('#envvar-container input')).map(
-            input => (input as HTMLInputElement).value
-          ),
+          ENVVAR: Array.from(document.querySelectorAll('#envvar-container > div')).map(row => {
+            const inputs = row.querySelectorAll('input');
+            const key = (inputs[0] as HTMLInputElement).value;
+            const value = (inputs[1] as HTMLInputElement).value;
+            return `${key}=${value}`;
+          }),          
           CMD: Array.from(document.querySelectorAll('#cmd-container input')).map(
             input => (input as HTMLInputElement).value
           ),
@@ -565,6 +564,45 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         return row;
       }
+
+      createEnvVarRow(key: string = '', value: string = ''): HTMLElement {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.marginBottom = '10px';
+      
+        // 创建第一个输入框（变量名）
+        const keyInput = document.createElement('input');
+        keyInput.type = 'text';
+        keyInput.style.flex = '1';
+        keyInput.placeholder = '变量名';
+        keyInput.value = key;
+        keyInput.style.marginRight = '5px'; // 添加右边距
+      
+        // 创建静态的等号标签
+        const equalsLabel = document.createElement('span');
+        equalsLabel.textContent = '=';
+        equalsLabel.style.margin = '0 5px'; // 添加左右边距
+      
+        // 创建第二个输入框（变量值）
+        const valueInput = document.createElement('input');
+        valueInput.type = 'text';
+        valueInput.style.flex = '1';
+        valueInput.placeholder = '变量值';
+        valueInput.value = value;
+      
+        // 创建移除按钮
+        const removeButton = this.createRemoveButton(row);
+      
+        // 将各个部分添加到行中
+        row.appendChild(removeButton);
+        row.appendChild(keyInput);
+        row.appendChild(equalsLabel); // 添加等号
+        row.appendChild(valueInput);
+      
+        return row;
+      }      
+      
     }
 
     const dynamicPanel = new DynamicPanel();
