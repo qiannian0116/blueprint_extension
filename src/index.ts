@@ -152,13 +152,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
       
       // 解析返回的 Blueprint JSON 数据并加载到表单中
       async parseBlueprintData(blueprintData: any): Promise<void> {
-        // 解析 BLUEPRINT, NAME, TYPE, VERSION, ENVIRONMENT, WORKDIR 部分
+        // 解析 BLUEPRINT, NAME, TYPE, VERSION, ENVIRONMENT, WORKDIR, DEPLOYABILITY 部分
         (document.getElementById('blueprint') as HTMLInputElement).value = blueprintData['BLUEPRINT'] || '';
         (document.getElementById('name') as HTMLInputElement).value = blueprintData['NAME'] || '';
         (document.getElementById('type') as HTMLInputElement).value = blueprintData['TYPE'] || '';
         (document.getElementById('version') as HTMLInputElement).value = blueprintData['VERSION'] || '';
         (document.getElementById('environment') as HTMLInputElement).value = blueprintData['ENVIRONMENT'] || '';
         (document.getElementById('workdir') as HTMLInputElement).value = blueprintData['WORKDIR'] || '';
+        (document.getElementById('deployability') as HTMLInputElement).value = blueprintData['DEPLOYABILITY'] || '';
 
         // 解析 ENVVAR 部分
         const envvarContainer = document.getElementById('envvar-container');
@@ -223,50 +224,139 @@ const plugin: JupyterFrontEndPlugin<void> = {
         row.style.display = 'flex';
         row.style.alignItems = 'center';
         row.style.marginBottom = '10px';
-      
+    
         // 创建下拉菜单
         const select = document.createElement('select');
         const options = ['PYTHON', 'LOCAL', 'PyPI', 'Apt', 'DockerHub'];
         options.forEach(option => {
-          const opt = document.createElement('option');
-          opt.value = option;
-          opt.textContent = option;
-          if (option === category) {
-            opt.selected = true;  // 根据解析的值预先选择
-          }
-          select.appendChild(opt);
+            const opt = document.createElement('option');
+            opt.value = option;
+            opt.textContent = option;
+            if (option === category) {
+                opt.selected = true; // 根据解析的值预先选择
+            }
+            select.appendChild(opt);
         });
         select.style.marginRight = '10px';
         select.style.width = '60px';
-      
-        // 创建文本框1，显示依赖项名称
+    
+        // 创建第一个文本框
         const input1 = document.createElement('input');
         input1.type = 'text';
         input1.style.flex = '1';
         input1.placeholder = '输入依赖项...';
-        input1.value = dependencyName;  // 设置解析的依赖名称
+        input1.value = dependencyName;
         input1.style.marginRight = '10px';
         input1.style.width = '60px';
-      
-        // 创建文本框2，显示版本或路径
+    
+        // 创建第二个文本框
         const input2 = document.createElement('input');
         input2.type = 'text';
         input2.style.flex = '1';
         input2.placeholder = '额外信息...';
-        input2.value = version;  // 设置解析的版本或路径
+        input2.value = version;
+        input2.style.marginRight = '10px';
         input2.style.width = '60px';
-      
+    
+        // 创建加号按钮
+        const addButton = document.createElement('button');
+        addButton.textContent = '+';
+        addButton.classList.add('jp-AddButton');
+        addButton.style.marginRight = '10px';
+        addButton.onclick = () => {
+            // 在当前行下面插入一行
+            const newRow = this.createAdditionalDependRow(category, '', '', '', '');
+            row.parentElement?.insertBefore(newRow, row.nextSibling);
+        };
+    
+        // 创建移除按钮
         const removeButton = this.createRemoveButton(row);
-        
-        // 将各部分加入行
+    
+        // 将所有元素添加到行中
         row.appendChild(removeButton);
         row.appendChild(select);
         row.appendChild(input1);
         row.appendChild(input2);
-      
+        row.appendChild(addButton);
+    
         return row;
-      }
-      
+    }
+    
+    // 创建新行的方法，包含五个文本框
+    createAdditionalDependRow(category: string, dependencyName: string, version: string, extraField1: string, extraField2: string): HTMLElement {
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.marginBottom = '10px';
+  
+      // 创建与主行相同的前三个输入
+      const select = document.createElement('select');
+      const options = ['PYTHON', 'LOCAL', 'PyPI', 'Apt', 'DockerHub'];
+      options.forEach(option => {
+          const opt = document.createElement('option');
+          opt.value = option;
+          opt.textContent = option;
+          if (option === category) {
+              opt.selected = true;
+          }
+          select.appendChild(opt);
+      });
+      select.style.marginRight = '10px';
+      select.style.width = '60px';
+  
+      const input1 = document.createElement('input');
+      input1.type = 'text';
+      input1.style.flex = '1';
+      input1.placeholder = '输入依赖项...';
+      input1.value = dependencyName;
+      input1.style.marginRight = '10px';
+  
+      const input2 = document.createElement('input');
+      input2.type = 'text';
+      input2.style.flex = '1';
+      input2.placeholder = '额外信息...';
+      input2.value = version;
+      input2.style.marginRight = '10px';
+  
+      // 新增的两个文本框
+      const input3 = document.createElement('input');
+      input3.type = 'text';
+      input3.style.flex = '1';
+      input3.placeholder = '额外输入1...';
+      input3.value = extraField1;
+      input3.style.marginRight = '10px';
+  
+      const input4 = document.createElement('input');
+      input4.type = 'text';
+      input4.style.flex = '1';
+      input4.placeholder = '额外输入2...';
+      input4.value = extraField2;
+  
+      // 创建加号按钮
+      const addButton = document.createElement('button');
+      addButton.textContent = '+';
+      addButton.classList.add('jp-AddButton');
+      addButton.style.marginRight = '10px';
+      addButton.onclick = () => {
+          // 在当前行下面插入一个新行
+          const newRow = this.createAdditionalDependRow('', '', '', '', '');
+          row.parentElement?.insertBefore(newRow, row.nextSibling);
+      };
+  
+      // 创建移除按钮
+      const removeButton = this.createRemoveButton(row);
+  
+      // 将所有元素添加到行中
+      row.appendChild(removeButton);
+      row.appendChild(select);
+      row.appendChild(input1);
+      row.appendChild(input2);
+      row.appendChild(input3);
+      row.appendChild(input4);
+      row.appendChild(addButton);
+  
+      return row;
+    }
       
       createFormFields(): HTMLElement {
         const formContainer = document.createElement('div');
@@ -276,7 +366,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
           { label: 'TYPE', placeholder: 'Type input...' },
           { label: 'VERSION', placeholder: 'Version input...' },
           { label: 'ENVIRONMENT', placeholder: 'Environment input...' },
-          { label: 'WORKDIR', placeholder: 'Workdir input...' }
+          { label: 'WORKDIR', placeholder: 'Workdir input...' },
+          { label: 'DEPLOYABILITY', placeholder: 'Deployability input...' }
         ];
 
         fields.forEach(field => {
@@ -367,87 +458,74 @@ const plugin: JupyterFrontEndPlugin<void> = {
         row.style.display = 'flex';
         row.style.alignItems = 'center';
         row.style.marginBottom = '10px';
-
+    
         if (sectionName === 'DEPEND') {
-          // 如果是 DEPEND 部分，生成一个下拉框和两个文本框
-
-          // 创建下拉菜单
-          const select = document.createElement('select');
-          const options = ['PYTHON', 'LOCAL', 'PyPI', 'Apt', 'DockerHub'];
-          options.forEach(option => {
-            const opt = document.createElement('option');
-            opt.value = option;
-            opt.textContent = option;
-            select.appendChild(opt);
-          });
-          select.style.marginRight = '10px'; // 添加右边距
-          select.style.width = '60px'; // 设置宽度
-
-          // 创建文本框1
-          const input1 = document.createElement('input');
-          input1.type = 'text';
-          input1.style.flex = '1';
-          input1.placeholder = '输入依赖项...';
-          input1.style.marginRight = '10px'; // 添加右边距
-          input1.style.width = '60px'; // 设置宽度
-
-          // 创建文本框2
-          const input2 = document.createElement('input');
-          input2.type = 'text';
-          input2.style.flex = '1';
-          input2.placeholder = '额外信息...';
-          input2.style.width = '60px'; // 设置宽度
-
-          const removeButton = this.createRemoveButton(row);
-          
-          row.appendChild(removeButton);
-          row.appendChild(select);
-          row.appendChild(input1);
-          row.appendChild(input2);
-        } else if (sectionName === 'CMD') {
-          // 如果是 CMD 部分，保持原有的单个文本框布局
-          const input = document.createElement('input');
-          input.type = 'text';
-          input.style.flex = '1';
-          input.placeholder = `${sectionName} input...`;
-
-          const removeButton = this.createRemoveButton(row);
-
-          row.appendChild(removeButton);
-          row.appendChild(input);
-        } else if (sectionName === 'CONTEXT') {
-          // 如果是 CONTEXT 部分，保持原有的单个文本框布局
-          const input = document.createElement('input');
-          input.type = 'text';
-          input.style.flex = '1';
-          input.placeholder = `${sectionName} input...`;
-
-          const removeButton = this.createRemoveButton(row);
-
-          row.appendChild(removeButton);
-          row.appendChild(input);
+            // 创建下拉菜单
+            const select = document.createElement('select');
+            const options = ['PYTHON', 'LOCAL', 'PyPI', 'Apt', 'DockerHub'];
+            options.forEach(option => {
+                const opt = document.createElement('option');
+                opt.value = option;
+                opt.textContent = option;
+                select.appendChild(opt);
+            });
+            select.style.marginRight = '10px'; // 添加右边距
+            select.style.width = '60px'; // 设置宽度
+    
+            // 创建文本框1
+            const input1 = document.createElement('input');
+            input1.type = 'text';
+            input1.style.flex = '1';
+            input1.placeholder = '输入依赖项...';
+            input1.style.marginRight = '10px'; // 添加右边距
+            input1.style.width = '60px'; // 设置宽度
+    
+            // 创建文本框2
+            const input2 = document.createElement('input');
+            input2.type = 'text';
+            input2.style.flex = '1';
+            input2.placeholder = '额外信息...';
+            input2.style.marginRight = '10px'; // 添加右边距
+            input2.style.width = '60px'; // 设置宽度
+    
+            // 创建加号按钮
+            const addButton = document.createElement('button');
+            addButton.textContent = '+';
+            addButton.classList.add('jp-AddButton');
+            addButton.style.marginRight = '10px';
+            addButton.onclick = () => {
+                // 在当前行下面插入一个新行
+                const newRow = this.createAdditionalDependRow('', '', '', '', '');
+                row.parentElement?.insertBefore(newRow, row.nextSibling);
+            };
+    
+            // 创建移除按钮
+            const removeButton = this.createRemoveButton(row);
+    
+            // 将各部分加入行
+            row.appendChild(removeButton);
+            row.appendChild(select);
+            row.appendChild(input1);
+            row.appendChild(input2);
+            row.appendChild(addButton);
+        } else if (sectionName === 'CMD' || sectionName === 'CONTEXT') {
+            // 原有逻辑保持不变
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.style.flex = '1';
+            input.placeholder = `${sectionName} input...`;
+    
+            const removeButton = this.createRemoveButton(row);
+    
+            row.appendChild(removeButton);
+            row.appendChild(input);
         } else if (sectionName === 'ENVVAR') {
-          // 如果是 ENVVAR 部分，包含两个文本框并用 = 连接
-          const envvarRow = this.createEnvVarRow();
-
-          row.appendChild(envvarRow);
+            // ENVVAR逻辑
+            const envvarRow = this.createEnvVarRow();
+            row.appendChild(envvarRow);
         }
         inputContainer.appendChild(row);
-      
-        // 添加调试信息，确认新行已添加
-        console.log(`Added new ${sectionName} row`, row);
-      
-        // 修正选择器，确保捕获正确的输入框
-        const containerId = inputContainer.id; // 获取输入容器的 id
-        setTimeout(() => {
-          // 确保我们在正确的容器中选择输入框
-          if (containerId) {
-            console.log(`Current ${sectionName} inputs:`, document.querySelectorAll(`#${containerId} input`));
-          } else {
-            console.error('Invalid containerId:', containerId);
-          }
-        }, 100);
-      }      
+      }
 
       createConfirmButton(): HTMLElement {
         const buttonContainer = document.createElement('div');
@@ -474,6 +552,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           VERSION: (document.getElementById('version') as HTMLInputElement).value,
           ENVIRONMENT: (document.getElementById('environment') as HTMLInputElement).value,
           WORKDIR: (document.getElementById('workdir') as HTMLInputElement).value,
+          DEPLOYABILITY: (document.getElementById('deployability') as HTMLInputElement).value,
           ENVVAR: Array.from(document.querySelectorAll('#envvar-container > div')).map(row => {
             const inputs = row.querySelectorAll('input');
             const key = (inputs[0] as HTMLInputElement).value;
